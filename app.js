@@ -38,4 +38,10 @@ async function load(value) {
   finally {if(active===controller) button.disabled=false;}
 }
 form.addEventListener('submit',event=>{event.preventDefault();load(input.value);});
-document.querySelector('#close').addEventListener('click',()=>{active?.abort();lastPage=null;frame.srcdoc='';document.querySelector('#result').hidden=true;document.body.classList.remove('viewing');status.textContent='One URL. Zero tolerance.';input.focus();});
+function startAnother() {
+  active?.abort();active=null;button.disabled=false;lastPage=null;frame.onload=null;frame.srcdoc='';
+  document.querySelector('#result').hidden=true;document.body.classList.remove('viewing');
+  status.textContent='';input.focus();input.select();window.scrollTo({top:0,behavior:'instant'});
+}
+document.querySelector('#close').addEventListener('click',startAnother);
+document.querySelector('#another').addEventListener('click',startAnother);
