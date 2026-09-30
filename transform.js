@@ -1,3 +1,12 @@
+export function filteredLink(destination, appUrl, options = {}) {
+  const target=new URL(destination);
+  if(!['http:','https:'].includes(target.protocol))throw new Error('Not a webpage');
+  const route=new URL(appUrl);route.search='';route.hash='';
+  route.searchParams.set('url',target.href);
+  route.searchParams.set('mode',options.mode==='replace'?'replace':'redact');
+  route.searchParams.set('term',options.replacement||'demon');
+  return route.href;
+}
 export const CAT_WORDS = /\b(?:cats?|kittens?|kitt(?:y|ies)|felines?|pussycats?|tomcats?|tabb(?:y|ies)|meows?|purr(?:s|ing|ed)?)\b/gi;
 export function redact(text, options = {}) { return text.replace(CAT_WORDS, word => options.mode === 'replace' ? (options.replacement || 'demon') : '█'.repeat(word.length)); }
 export function transform(html, sourceUrl, options = {}) {
@@ -16,6 +25,15 @@ export function transform(html, sourceUrl, options = {}) {
     if (el.hasAttribute('data-src') && !el.hasAttribute('src')) {
       try {const u=new URL(el.getAttribute('data-src'),sourceUrl);if (['http:','https:'].includes(u.protocol)) el.setAttribute('src',u.href);} catch {}
     }
+  });
+  if(options.appUrl) doc.querySelectorAll('a[href],area[href]').forEach(link=>{
+    const original=link.getAttribute('href');
+    try {
+      link.setAttribute('data-nocats-url',original);
+      link.setAttribute('href',filteredLink(original,options.appUrl,options));
+      link.setAttribute('target','_top');
+      link.removeAttribute('download');
+    } catch {link.removeAttribute('href');link.removeAttribute('target');}
   });
   const walker = doc.createTreeWalker(doc.documentElement, NodeFilter.SHOW_TEXT);
   let count=0, node;

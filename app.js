@@ -1,17 +1,17 @@
-import {transform} from './transform.js?v=2';
+import {transform} from './transform.js?v=5';
 const form=document.querySelector('#form'), input=document.querySelector('#url'), status=document.querySelector('#status'), button=document.querySelector('#submit'), frame=document.querySelector('#preview');
 const modeSwitch=document.querySelector('#mode'), replacement=document.querySelector('#replacement');
 let active, lastPage, linkTimer;
 let previewSerial=0;
 function report(message) { status.textContent=message; status.classList.toggle("navigation-status",document.body.classList.contains("viewing")); }
-function options() {return {mode:modeSwitch.getAttribute('aria-checked')==='true'?'replace':'redact', replacement:replacement.value.trim()||'demon'};}
+function options() {return {mode:modeSwitch.getAttribute('aria-checked')==='true'?'replace':'redact', replacement:replacement.value.trim()||'demon', appUrl:window.location.href};}
 function render(data) {
   const selected=options(), clean=transform(data.html,data.url,selected);
   clearInterval(linkTimer);
   const marker=String(++previewSerial);
   let attached=false;
   function attachLinks() {
-    const doc=frame.contentDocument;
+    let doc;try{doc=frame.contentDocument;}catch{return;}
     if(attached||!doc||doc.documentElement?.getAttribute('data-nocats-preview')!==marker)return;
     attached=true;clearInterval(linkTimer);
     doc.addEventListener('submit',event=>event.preventDefault(),true);
@@ -20,7 +20,7 @@ function render(data) {
       const a=origin?.closest?.('a[href],area[href]');if(!a)return;
       event.preventDefault();event.stopPropagation();
       try {
-        const target=new URL(a.getAttribute('href'),data.url),source=new URL(data.url);
+        const target=new URL(a.getAttribute('data-nocats-url')||a.getAttribute('href'),data.url),source=new URL(data.url);
         if(!['http:','https:'].includes(target.protocol)){report('This link is not a webpage.');return;}
         if(target.origin===source.origin&&target.pathname===source.pathname&&target.search===source.search&&target.hash){doc.getElementById(decodeURIComponent(target.hash.slice(1)))?.scrollIntoView();return;}
         load(target.href);
@@ -31,6 +31,7 @@ function render(data) {
   frame.onload=attachLinks;
   frame.srcdoc=clean.html.replace(/<html(?=[\s>])/i,`<html data-nocats-preview="${marker}"`);
   linkTimer=setInterval(attachLinks,25);
+  setTimeout(()=>{if(previewSerial===Number(marker))clearInterval(linkTimer);},25000);
   status.classList.remove('navigation-status');
   document.querySelector('#result').hidden=false;document.body.classList.add('viewing');
   document.querySelector('#summary').textContent=`${clean.count} cat mention${clean.count===1?'':'s'} ${selected.mode==='replace'?'replaced':'redacted'} · ${new URL(data.url).hostname}`;
@@ -61,7 +62,16 @@ form.addEventListener('submit',event=>{event.preventDefault();load(input.value);
 function startAnother() {
   clearInterval(linkTimer);status.classList.remove('navigation-status');active?.abort();active=null;button.disabled=false;lastPage=null;frame.onload=null;frame.srcdoc='';
   document.querySelector('#result').hidden=true;document.body.classList.remove('viewing');
+  const home=new URL(window.location.href);home.search='';home.hash='';history.replaceState(null,'',home);
   status.textContent='';input.focus();input.select();window.scrollTo({top:0,behavior:'instant'});
 }
 document.querySelector('#close').addEventListener('click',startAnother);
 document.querySelector('#another').addEventListener('click',startAnother);
+
+// A native link fallback reloads No Cats with the destination and current settings.
+const initialParams=new URLSearchParams(window.location.search);
+if(initialParams.has('url')) {
+  modeSwitch.setAttribute('aria-checked',String(initialParams.get('mode')==='replace'));
+  replacement.value=(initialParams.get('term')||'demon').slice(0,80);resizeTerm();
+  input.value=initialParams.get('url');load(input.value);
+}
