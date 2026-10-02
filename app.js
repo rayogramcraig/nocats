@@ -1,10 +1,12 @@
-import {transform} from './transform.js?v=5';
+import {transform} from './transform.js?v=6';
 const form=document.querySelector('#form'), input=document.querySelector('#url'), status=document.querySelector('#status'), button=document.querySelector('#submit'), frame=document.querySelector('#preview');
 const modeSwitch=document.querySelector('#mode'), replacement=document.querySelector('#replacement');
+const imageToggle=document.querySelector('#images');
+let hideImages=false;
 let active, lastPage, linkTimer;
 let previewSerial=0;
 function report(message) { status.textContent=message; status.classList.toggle("navigation-status",document.body.classList.contains("viewing")); }
-function options() {return {mode:modeSwitch.getAttribute('aria-checked')==='true'?'replace':'redact', replacement:replacement.value.trim()||'demon', appUrl:window.location.href};}
+function options() {return {mode:modeSwitch.getAttribute('aria-checked')==='true'?'replace':'redact', replacement:replacement.value.trim()||'demon', hideImages, appUrl:window.location.href};}
 function render(data) {
   const selected=options(), clean=transform(data.html,data.url,selected);
   clearInterval(linkTimer);
@@ -14,6 +16,7 @@ function render(data) {
     let doc;try{doc=frame.contentDocument;}catch{return;}
     if(attached||!doc||doc.documentElement?.getAttribute('data-nocats-preview')!==marker)return;
     attached=true;clearInterval(linkTimer);
+    applyImageMasks(doc,selected);
     doc.addEventListener('submit',event=>event.preventDefault(),true);
     doc.addEventListener('click',event=>{
       const origin=event.target.nodeType===1?event.target:event.target.parentElement;
@@ -35,7 +38,26 @@ function render(data) {
   status.classList.remove('navigation-status');
   document.querySelector('#result').hidden=false;document.body.classList.add('viewing');
   document.querySelector('#summary').textContent=`${clean.count} cat mention${clean.count===1?'':'s'} ${selected.mode==='replace'?'replaced':'redacted'} · ${new URL(data.url).hostname}`;
-  status.textContent=selected.mode==='replace'?`Cat words replaced with “${selected.replacement}”. Images remain.`:'Cat words blacked out. Images remain; some interactive pages may look different.';
+  status.textContent=selected.mode==='replace'?`Cat words replaced with “${selected.replacement}”. ${selected.hideImages?'Cat image masks enabled.':'Images shown.'}`:`Cat words blacked out. Cat image masks ${selected.hideImages?'enabled':'off'}; some interactive pages may look different.`;
+}
+function updateImageToggle(){
+  imageToggle.setAttribute('aria-pressed',String(hideImages));
+  imageToggle.setAttribute('aria-label',hideImages?'Show cat images':'Hide cat images');
+  imageToggle.title=hideImages?'Show cat images':'Hide cat images';
+}
+imageToggle.addEventListener('click',()=>{hideImages=!hideImages;updateImageToggle();if(lastPage)render(lastPage);});
+function applyImageMasks(doc,selected){
+  if(!selected.hideImages)return;
+  const style=doc.createElement('style');
+  style.textContent='.nocats-image-mask{position:absolute!important;background:#000!important;color:#ff0000!important;display:flex!important;align-items:center!important;justify-content:center!important;pointer-events:none!important;z-index:2147483647!important;overflow:hidden!important;text-align:center!important;font-family:Chivo,Arial,sans-serif!important;font-weight:700!important;line-height:1.1!important;box-sizing:border-box!important;padding:8px!important}';
+  doc.head.append(style);
+  const pairs=[...doc.querySelectorAll('[data-nocats-image]')].map(img=>{
+    const mask=doc.createElement('span');mask.className='nocats-image-mask';mask.textContent=selected.mode==='replace'?selected.replacement:'';mask.setAttribute('aria-hidden','true');doc.body.append(mask);return {img,mask};
+  });
+  function place(){for(const {img,mask} of pairs){const r=img.getBoundingClientRect(),w=doc.defaultView;const css=w.getComputedStyle(img);Object.assign(mask.style,{left:(r.left+w.scrollX)+'px',top:(r.top+w.scrollY)+'px',width:r.width+'px',height:r.height+'px',borderRadius:css.borderRadius,fontSize:Math.min(76,Math.max(14,r.width/(Math.max(6,selected.replacement.length)*.65)))+'px',visibility:r.width&&r.height&&css.visibility!=='hidden'?'visible':'hidden'});}}
+  pairs.forEach(({img})=>img.addEventListener('load',place));
+  doc.defaultView.addEventListener('resize',place);doc.addEventListener('scroll',place,true);
+  const observer=new doc.defaultView.ResizeObserver(place);observer.observe(doc.body);pairs.forEach(({img})=>observer.observe(img));place();
 }
 function resizeTerm(){replacement.style.width=Math.max(3,Math.min(24,replacement.value.length+1))+'ch';}
 modeSwitch.addEventListener('click',()=>{modeSwitch.setAttribute('aria-checked',String(modeSwitch.getAttribute('aria-checked')!=='true'));if(lastPage)render(lastPage);});
@@ -70,6 +92,7 @@ document.querySelector('#another').addEventListener('click',startAnother);
 
 // A native link fallback reloads No Cats with the destination and current settings.
 const initialParams=new URLSearchParams(window.location.search);
+hideImages=initialParams.get('images')==='hide';updateImageToggle();
 if(initialParams.has('url')) {
   modeSwitch.setAttribute('aria-checked',String(initialParams.get('mode')==='replace'));
   replacement.value=(initialParams.get('term')||'demon').slice(0,80);resizeTerm();

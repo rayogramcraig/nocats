@@ -5,6 +5,7 @@ export function filteredLink(destination, appUrl, options = {}) {
   route.searchParams.set('url',target.href);
   route.searchParams.set('mode',options.mode==='replace'?'replace':'redact');
   route.searchParams.set('term',options.replacement||'demon');
+  route.searchParams.set('images',options.hideImages?'hide':'show');
   return route.href;
 }
 export const CAT_WORDS = /\b(?:cats?|kittens?|kitt(?:y|ies)|felines?|pussycats?|tomcats?|tabb(?:y|ies)|meows?|purr(?:s|ing|ed)?)\b/gi;
@@ -12,6 +13,15 @@ export function redact(text, options = {}) { return text.replace(CAT_WORDS, word
 export function transform(html, sourceUrl, options = {}) {
   const doc = new DOMParser().parseFromString(html, 'text/html');
   doc.querySelectorAll('script,iframe,frame,frameset,object,embed,applet,base,meta,template,portal').forEach(el => el.remove());
+  // Metadata detection is deliberately local to each image, never the whole article.
+  let imageCount=0;
+  doc.querySelectorAll('img').forEach(img=>{
+    const caption=img.closest('figure')?.querySelector('figcaption')?.textContent||'';
+    const description=[img.alt,img.title,img.getAttribute('aria-label'),img.getAttribute('src'),img.getAttribute('data-src'),img.getAttribute('srcset'),caption].filter(Boolean).join(' ').replace(/[_%/.-]+/g,' ');
+    const animal=/\b(cats?|kittens?|kitt(?:y|ies)|felines?|pussycats?|tomcats?|tabb(?:y|ies))\b/i.test(description);
+    const product=/\b(food|litter|packaging|product|supplement|proviable|advantage|booster|logo|icon)\b/i.test(description);
+    if(animal&&!product){img.setAttribute('data-nocats-image','');imageCount++;}
+  });
   // Remote code is disabled. Styles and images still load from their source.
   doc.querySelectorAll('link').forEach(el => {if (!['stylesheet','icon'].includes(el.rel.toLowerCase())) el.remove();});
   doc.querySelectorAll('*').forEach(el => {
@@ -21,6 +31,9 @@ export function transform(html, sourceUrl, options = {}) {
       else if (['href','src','xlink:href','poster','background'].includes(attr.name)) {
         try { const url = new URL(attr.value, sourceUrl); if (!['http:','https:'].includes(url.protocol) && !(attr.name === 'src' && /^data:image\/(png|jpeg|gif|webp);/i.test(attr.value))) el.removeAttribute(attr.name); else el.setAttribute(attr.name,url.href); } catch {el.removeAttribute(attr.name);}
       }
+    }
+    if(el.hasAttribute('srcset')) {
+      el.setAttribute('srcset',el.getAttribute('srcset').split(',').map(candidate=>{const [path,...size]=candidate.trim().split(/\s+/);try{const u=new URL(path,sourceUrl);return ['http:','https:'].includes(u.protocol)?[u.href,...size].join(' '):'';}catch{return '';}}).filter(Boolean).join(', '));
     }
     if (el.hasAttribute('data-src') && !el.hasAttribute('src')) {
       try {const u=new URL(el.getAttribute('data-src'),sourceUrl);if (['http:','https:'].includes(u.protocol)) el.setAttribute('src',u.href);} catch {}
@@ -43,5 +56,5 @@ export function transform(html, sourceUrl, options = {}) {
   }
   const base=doc.createElement('base');base.href=sourceUrl;doc.head.prepend(base);
   const csp=doc.createElement('meta');csp.httpEquiv='Content-Security-Policy';csp.content="default-src 'none'; script-src 'none'; style-src https: http: 'unsafe-inline'; img-src https: http: data:; font-src https: http: data:; media-src https: http:; connect-src 'none'; frame-src 'none'; object-src 'none'; form-action 'none'";doc.head.prepend(csp);
-  return {html:'<!doctype html>\n'+doc.documentElement.outerHTML,count};
+  return {html:'<!doctype html>\n'+doc.documentElement.outerHTML,count,imageCount};
 }
