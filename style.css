@@ -5,7 +5,7 @@ body.viewing #status.navigation-status{display:block;margin:18px 0 0;font-size:1
 @media(max-width:700px){body.viewing #status.navigation-status{margin-right:-76px}}
 
 /* Image visibility control */
-.image-toggle{width:52px;height:56px;flex:0 0 52px;margin-left:40px;padding:0;border:0;background:transparent;color:white;cursor:pointer}.image-toggle svg{display:block;width:100%;height:100%}.image-smile{display:none}.image-toggle[aria-pressed=true] .image-smile{display:block}.image-toggle[aria-pressed=true] .image-cat{display:none}
+.image-toggle{width:52px;height:56px;flex:0 0 52px;margin-left:40px;padding:0;border:0;background:transparent;color:white;cursor:pointer}.image-toggle img{display:block;width:100%;height:100%;object-fit:contain}.image-toggle img.image-smile{display:none}.image-smile{display:none}.image-toggle[aria-pressed=true] .image-smile{display:block}.image-toggle[aria-pressed=true] .image-cat{display:none}.image-toggle[aria-pressed=true] img.image-smile{display:block}
 body.viewing .entry{margin-right:390px}body.viewing .options{gap:24px}
 @media(max-width:1100px){.image-toggle{width:40px;height:44px;flex-basis:40px;margin-left:12px}body.viewing .entry{margin-right:290px}body.viewing .options{gap:14px}}
 @media(max-width:700px){.image-toggle{width:34px;height:38px;flex-basis:34px;margin-left:0}body.viewing .entry{margin-right:66px}body.viewing .options{gap:10px}}
