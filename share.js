@@ -46,8 +46,8 @@
       field.remove();
       if (!copied) { window.prompt('Copy this link:', link); return; }
     }
-    share.textContent = 'Copied ✓';
-    window.setTimeout(() => { share.textContent = 'Share ↗'; }, 1800);
+    share.classList.add('copied');
+    window.setTimeout(() => { share.classList.remove('copied'); }, 1800);
   });
 
   // app.js already restores ?url, ?mode, ?term and ?images on startup.
