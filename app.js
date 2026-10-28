@@ -7,6 +7,40 @@ let active, lastPage, linkTimer;
 let previewSerial=0;
 function report(message) { status.textContent=message; status.classList.toggle("navigation-status",document.body.classList.contains("viewing")); }
 function options() {return {mode:modeSwitch.getAttribute('aria-checked')==='true'?'replace':'redact', replacement:replacement.value.trim()||'demon', hideImages, appUrl:window.location.href};}
+// Bing wraps many search result links in /ck/a?u=a1... redirect URLs.
+// Resolve them here so the edge function fetches the result site, not Bing's redirect.
+function destinationUrl(raw, base) {
+  const candidate=new URL(raw,base);
+  if (!/(^|\.)bing\.com$/i.test(candidate.hostname)) return candidate;
+  const path=candidate.pathname.toLowerCase();
+  if (!(/^\/ck\/a(?:\/|$)/.test(path)||/^\/(?:alink|aclick|link)(?:\/|$)/.test(path))) return candidate;
+  for (const key of ['u','url','r']) {
+    const param=candidate.searchParams.get(key);
+    if (!param) continue;
+    const variants=[param];
+    if (key==='u') {
+      let token=param.startsWith('a1')?param.slice(2):param;
+      try {
+        token=token.replace(/-/g,'+').replace(/_/g,'/');
+        const binary=atob(token.padEnd(Math.ceil(token.length/4)*4,'='));
+        variants.push(new TextDecoder().decode(Uint8Array.from(binary,c=>c.charCodeAt(0))));
+      } catch { /* Some Bing URL parameters aren't base64-encoded. */ }
+    }
+    for (const item of variants) {
+      try {
+        const dest=new URL(item);
+        if (['http:','https:'].includes(dest.protocol)&& !/(^|\.)bing\.com$/i.test(dest.hostname)) return dest;
+      } catch { /* Not a destination URL. */ }
+    }
+  }
+  return candidate;
+}
+function isEmptyPage(html) {
+  if (!html || !html.trim()) return true;
+  const doc=new DOMParser().parseFromString(html,'text/html');
+  doc.querySelectorAll('script,style,noscript,template,svg,meta,link').forEach(el=>el.remove());
+  return !(doc.body?.textContent||'').trim() && !doc.body?.querySelector('img,iframe,video,canvas,object');
+}
 function render(data) {
   const selected=options(), clean=transform(data.html,data.url,selected);
   clearInterval(linkTimer);
@@ -23,7 +57,7 @@ function render(data) {
       const a=origin?.closest?.('a[href],area[href]');if(!a)return;
       event.preventDefault();event.stopPropagation();
       try {
-        const target=new URL(a.getAttribute('data-nocats-url')||a.getAttribute('href'),data.url),source=new URL(data.url);
+        const target=destinationUrl(a.getAttribute('data-nocats-url')||a.getAttribute('href'),data.url),source=new URL(data.url);
         if(!['http:','https:'].includes(target.protocol)){report('This link is not a webpage.');return;}
         if(target.origin===source.origin&&target.pathname===source.pathname&&target.search===source.search&&target.hash){doc.getElementById(decodeURIComponent(target.hash.slice(1)))?.scrollIntoView();return;}
         input.value=target.href;load(target.href);
@@ -90,7 +124,9 @@ async function load(value) {
   try {
     const response=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:url.href}),signal:controller.signal});
     const data=await response.json();if(!response.ok) throw Error(data.error||'Could not load that webpage.');
-    if(active!==controller)return;lastPage=data;input.dataset.loadedUrl=url.href;render(data);
+    if(active!==controller)return;
+    if(isEmptyPage(data.html)) {report('This link returned a blank page. Try another search result.');return;}
+    lastPage=data;input.dataset.loadedUrl=data.url||url.href;render(data);
   } catch(error) {if(active===controller){if(timedOut)report('This page took too long to load. Try the link again.');else if(error.name!=='AbortError')report(error.message==='Failed to fetch'?'Could not reach No Cats. Check the Edge Function URL and allowed origins.':error.message);}}
   finally {clearTimeout(requestTimer);if(active===controller) button.disabled=false;}
 }
