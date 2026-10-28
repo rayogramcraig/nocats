@@ -18,7 +18,7 @@
   }
 
   function shareUrl() {
-    const target = validPage(urlField.value);
+    const target = validPage(urlField.dataset.loadedUrl || urlField.value);
     if (!target) return null;
     const link = new URL(window.location.pathname, window.location.origin);
     link.searchParams.set('url', target);

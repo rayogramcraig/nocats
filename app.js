@@ -26,7 +26,7 @@ function render(data) {
         const target=new URL(a.getAttribute('data-nocats-url')||a.getAttribute('href'),data.url),source=new URL(data.url);
         if(!['http:','https:'].includes(target.protocol)){report('This link is not a webpage.');return;}
         if(target.origin===source.origin&&target.pathname===source.pathname&&target.search===source.search&&target.hash){doc.getElementById(decodeURIComponent(target.hash.slice(1)))?.scrollIntoView();return;}
-        load(target.href);
+        input.value=target.href;load(target.href);
       }catch{report('Could not open this link.');}
     },true);
   }
@@ -65,24 +65,38 @@ replacement.addEventListener('input',()=>{resizeTerm();if(lastPage&&options().mo
 replacement.addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();replacement.blur();}});
 replacement.addEventListener('blur',()=>{if(!replacement.value.trim()){replacement.value='demon';resizeTerm();}});
 resizeTerm();
+// Accept a website address or a search phrase in the same field.
+function resolveInput(value) {
+  const text=value.trim();
+  if (!text) throw Error('Enter a website URL or search terms.');
+  const hasScheme=/^[a-z][a-z0-9+.-]*:\/\//i.test(text);
+  const looksLikeWebsite=!/\s/.test(text)&&(
+    hasScheme || /^localhost(?::\d+)?(?:[/?#]|$)/i.test(text) ||
+    /^(?:[^./\s]+\.)+[^./\s]{2,}(?::\d+)?(?:[/?#]|$)/i.test(text)
+  );
+  if (!looksLikeWebsite) return new URL('https://www.google.com/search?q='+encodeURIComponent(text));
+  const url=new URL(hasScheme?text:'https://'+text);
+  if (!['http:','https:'].includes(url.protocol)||url.username||url.password) throw Error('Enter a valid webpage URL.');
+  return url;
+}
 async function load(value) {
   let url;
-  try { url=new URL(/^https?:\/\//i.test(value.trim())?value.trim():'https://'+value.trim());if (!['http:','https:'].includes(url.protocol)||url.username||url.password) throw Error(); } catch {status.textContent='Enter a valid http or https webpage URL.';return;}
+  try { url=resolveInput(value); } catch (error) {report(error.message);return;}
   const endpoint=window.NOCATS_CONFIG?.endpoint;
   if (!endpoint || endpoint.includes('YOUR_PROJECT_REF')) {status.textContent='Almost ready: add your Supabase project reference in config.js.';return;}
-  active?.abort();const controller=new AbortController();active=controller;
-  input.value=url.href;button.disabled=true;report('Loading '+url.hostname+'…');
+  active?.abort();delete input.dataset.loadedUrl;const controller=new AbortController();active=controller;
+  button.disabled=true;report('Loading '+url.hostname+'…');
   let timedOut=false;const requestTimer=setTimeout(()=>{timedOut=true;controller.abort();},25000);
   try {
     const response=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:url.href}),signal:controller.signal});
     const data=await response.json();if(!response.ok) throw Error(data.error||'Could not load that webpage.');
-    if(active!==controller)return;lastPage=data;render(data);
+    if(active!==controller)return;lastPage=data;input.dataset.loadedUrl=url.href;render(data);
   } catch(error) {if(active===controller){if(timedOut)report('This page took too long to load. Try the link again.');else if(error.name!=='AbortError')report(error.message==='Failed to fetch'?'Could not reach No Cats. Check the Edge Function URL and allowed origins.':error.message);}}
   finally {clearTimeout(requestTimer);if(active===controller) button.disabled=false;}
 }
 form.addEventListener('submit',event=>{event.preventDefault();load(input.value);});
 function startAnother() {
-  clearInterval(linkTimer);status.classList.remove('navigation-status');active?.abort();active=null;button.disabled=false;lastPage=null;frame.onload=null;frame.srcdoc='';
+  clearInterval(linkTimer);status.classList.remove('navigation-status');active?.abort();active=null;button.disabled=false;lastPage=null;delete input.dataset.loadedUrl;frame.onload=null;frame.srcdoc='';
   document.querySelector('#result').hidden=true;document.body.classList.remove('viewing');
   const home=new URL(window.location.href);home.search='';home.hash='';history.replaceState(null,'',home);
   status.textContent='';input.focus();input.select();window.scrollTo({top:0,behavior:'instant'});
