@@ -74,7 +74,7 @@ function resolveInput(value) {
     hasScheme || /^localhost(?::\d+)?(?:[/?#]|$)/i.test(text) ||
     /^(?:[^./\s]+\.)+[^./\s]{2,}(?::\d+)?(?:[/?#]|$)/i.test(text)
   );
-  if (!looksLikeWebsite) return new URL('https://www.google.com/search?q='+encodeURIComponent(text));
+  if (!looksLikeWebsite) return new URL('https://html.duckduckgo.com/html/?q='+encodeURIComponent(text));
   const url=new URL(hasScheme?text:'https://'+text);
   if (!['http:','https:'].includes(url.protocol)||url.username||url.password) throw Error('Enter a valid webpage URL.');
   return url;
